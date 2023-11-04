@@ -168,7 +168,88 @@ class CharCorruptionDataset(Dataset):
 
     def __getitem__(self, idx):
         # TODO [part e]: see spec above
-        raise NotImplementedError
+
+        doc = self.data[idx]
+        
+        # in case of invalid string simply return pad
+        if len(doc) <4:
+            x = torch.tensor([self.stoi[self.PAD_CHAR] for x in range(self.block_size-1)], dtype=torch.long) # -1 because output is truncated
+            y = torch.tensor([self.stoi[self.PAD_CHAR] for x in range(self.block_size-1)], dtype=torch.long)
+
+            return x,y
+            # raise RuntimeError(f"length of doc is invalid.  len(doc) ={len(doc)} idx = {idx}, len(data) = {len(self.data)}")
+
+
+        # choose length of resulting doc 
+        trunc_len = random.randint(4, int(self.block_size*7/8))
+        #truncate
+        doc = doc[: trunc_len]
+
+        if len(doc) <4:
+            raise RuntimeError(f"length of doc is invalid.  len(doc) ={len(doc)} idx = {idx}, trunc_len = {trunc_len}")
+
+
+        # choose length of mask: flip a coin with probability 3/4. Then uniformy sample number below 1/4 if heads, else tails.
+        # expectation is 1/4 on average.
+        quarter_len = int((trunc_len)/4)
+        if random.random() <3./4:
+            length_masked = random.randint(1, quarter_len) #length at least 1
+        else:
+            length_masked = random.randint(quarter_len, len(doc)-2) # leave 2 chars for prefix and suffix
+
+        # if not len(doc)  >=  length_masked + 2:
+        #     raise RuntimeError("length of doc is invalid: ", len(doc))
+        #     print (len(doc), length_masked)
+
+        length_masked = random.randint(1, quarter_len)
+        #pick random index for start of mask
+        start_masked = random.randint(1, len(doc)-1 - length_masked ) # leave one index for prefix in start, and as much as needed from end.
+
+        #split document
+        prefix = doc[:start_masked]
+        masked = doc[start_masked: start_masked + length_masked]
+        suffix = doc[start_masked + length_masked: len(doc)]
+
+        #rearrange, separate, and pad string 
+        rearranged = prefix + self.MASK_CHAR + suffix + self.MASK_CHAR + masked
+        rearranged += ''.join([self.PAD_CHAR for x in range(self.block_size-len(rearranged))])
+
+        assert len(rearranged) == self.block_size
+
+        x = torch.tensor([self.stoi[x] for x in rearranged[:-1]], dtype=torch.long)
+        y = torch.tensor([self.stoi[x] for x in rearranged[1:]], dtype=torch.long)
+
+        # doc = self.data[idx]
+        # truncated_len = int(torch.randint(low=4, high=int(self.block_size * 7/8) + 1, size=(1,))[0]) #random.randint(4, int(self.block_size*7/8))
+        # truncated_doc = doc[:truncated_len]
+
+        # #masked_content_len = int(random.normalvariate(truncated_len/4, 1))
+        # masked_content_len = int(torch.randint(low=1, high=2*int(truncated_len/4), size=(1,))[0])
+        # masked_content_index = int(torch.randint(low=0, high=truncated_len - int(truncated_len/4) + 1, size=(1,))[0])
+        
+        # prefix = truncated_doc[:masked_content_index]
+        # suffix = truncated_doc[masked_content_index + masked_content_len:]
+        # masked_content = truncated_doc[masked_content_index : masked_content_index + masked_content_len]
+
+        # masked_string = prefix + self.MASK_CHAR + suffix + self.MASK_CHAR + masked_content + self.PAD_CHAR*(self.block_size - len(prefix + self.MASK_CHAR + suffix + self.MASK_CHAR + masked_content) + 1)
+
+        # x = masked_string[:-1]
+        # y = masked_string[1:]
+        
+        # x = torch.tensor([self.stoi[c] for c in x], dtype=torch.long)
+        # y = torch.tensor([self.stoi[c] for c in y], dtype=torch.long)
+
+
+
+
+        return x, y
+
+
+
+
+         
+
+
 
 """
 Code under here is strictly for your debugging purposes; feel free to modify

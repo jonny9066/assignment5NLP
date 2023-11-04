@@ -33,6 +33,7 @@ args = argp.parse_args()
 # Save the device
 device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu'
 
+
 # TensorBoard training log
 writer = SummaryWriter(log_dir='expt/%s/%s_%s_%d_pt_lr_%f_ft_lr_%f' % (
     args.function,
@@ -62,14 +63,18 @@ Don't change above here; write your code below
 
 # define models.
 # note: models should moved to device defined on line 34.
-
 if args.variant == 'vanilla':
     # [part c] Make some model here
     model = model.GPT(mconf)
-    model.to('cuda') # fixes error caused by part of parameters being on cpe and part on GPU
+    model.to(device) # fixes error caused by part of parameters being on cpu and part on GPU
 elif args.variant == 'perceiver':
     # set mconf.perceiver, and mconf.bottleneck_dim parameters appropriately.
-    pass # [part g] Make some other model here
+    mconf.perceiver = True
+    mconf.bottleneck_dim = args.bottleneck_dim
+
+    # [part g] Make some other model here
+    model = model.GPT(mconf)
+    model.to(device) # fixes error caused by part of parameters being on cpe and part on GPU
 else:
     raise ValueError("Unknown model variant")
 
@@ -94,7 +99,23 @@ if args.function == 'pretrain':
     # final_tokens=200*len(pretrain_dataset)*block_size
     # num_workers=4
     # writer=writer 
-    raise NotImplementedError
+    
+    # load the corpus with the special format
+    corruption_dataset = dataset.CharCorruptionDataset(open(args.pretrain_corpus_path, encoding='utf-8').read(), 128)
+
+    # name_dataset = dataset.NameDataset(corruption_dataset,
+    #         open('birth_places_train.tsv', encoding='utf-8').read())
+
+    tconf = trainer.TrainerConfig(max_epochs=650, batch_size=128, learning_rate=args.pretrain_lr,
+                        lr_decay=True, warmup_tokens=512*20, final_tokens=200*len(pretrain_dataset)*block_size,
+                        num_workers=4, writer=writer)
+    
+    train_obj = trainer.Trainer(model, corruption_dataset, None, tconf)
+    train_obj.train()
+    # save parameters
+    torch.save(model.state_dict(), args.writing_params_path)
+
+
 elif args.function == 'finetune':
     assert args.writing_params_path is not None
     assert args.finetune_corpus_path is not None
@@ -171,4 +192,5 @@ elif args.function == 'evaluate':
     else:
         print('Predictions written to {}; no targets provided'
                 .format(args.outputs_path))
+
 
